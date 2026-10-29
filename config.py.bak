@@ -1,0 +1,49 @@
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# ==========================================
+# Configuration (Token & Owner ID)
+# ==========================================
+TOKEN = "8865307650:AAHe4c3MfOLX0QHwrzKZabteucawcegBmmY"
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+FILE_URL = f"https://api.telegram.org/file/bot{TOKEN}/"
+
+OWNER_ID = 8748650848
+BOT_USERNAME = ""
+DB_FILE = "bot_data.json"
+
+# Panel API Base URLs
+STEX_BASE_URL = "https://api.2oo9.cloud/MXS47FLFX0U/tness/@public/api"
+VOLTX_BASE_URL = "https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api"
+ZENEX_BASE_URL = "https://api.zenexnetwork.com"
+MINT_BASE_URL = "https://api.2oo9.cloud/MXS47FLFX0U/tnemn/@public/api"
+
+# ==========================================
+# Firebase Setup
+# ==========================================
+firebase_credentials_json = r"""
+{
+  "type": "service_account",
+  "project_id": "jihan1122",
+  "private_key_id": "5c6057d21de8051e43304665750db3fe1ecb1267",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDLprOuCGvHOUNd\n4QBzvvs7UUFp5HpsWvSSj4H56JEu6Lj2cwGcZK/SLAHM3A7IdFoOtABnfpBFk91J\n+o2lsD24XftDfY8phhyVqBaejlhwUBl8IkzZx6+aGEqOk9eOlrJwaqqy6z0/3IZH\nas+3OigKHGaYKOmSDU0j2PLZICq0f5265VHSe5wonXAGZdWFPMaGZJXI9j/sFL5v\n3bC8ePMLO2Ra6n/rHOKYOAr0TRnFneHv0MM2arkmUZNchsmqI3mlCf0Xi4NNejT7\no6vDnPX0beekWpjNMMXLlg/loZoQBoP4YlkNzqPbEpkjgPHapO0j7DKiYKpk1Jay\nenhrXmD/AgMBAAECggEATC58IKo9xzUAomm9BY934+Stl7NEqKwNuZW9hYMebHHa\nXzb+b0arDvAvbDcVwJ7l4YIsdIq/5Yc+zKHRwx1+uS1PBRw/JcVphAJxE7ckFj+g\niPM71GwCoJ5dpaBgjpKJBcyhNnURYIZaJPUr5tr2h3HAX0NOvLgFF1fc4KRL1WEM\nOOAjGJ1atNYl4JOkRYhTlk32ty0NdglP91OPpr43HKtWA30BojGOcM1fiXy2Blkc\nLWaevDGypJkgZWAKFGHCFflltKGZlNSRD/TmUyEkuhL5Di3cJQcO6cO6So76JuUl\ndEYIhN7O6gf6VtAtnKmrxhVodIDEYx58DGfu1INMoQKBgQD7pGwmMU4vGtHmmb4q\nhrYt/Im7IDqPkOCmqu6w0of03wZvYa/YQGrfxD7tmS0EEsBuLIKep39VBjNKjRVX\nPMMWsScAgQchSrQBL6a6r18pdIzf5knhgPQxqJZuJMyyixyV/LrWwLabUgy9v4Vz\nCbXF3oZT+HMLCvtv7kvQFMEb1QKBgQDPLYaexyPznAzVql+GTyIMCwdz0BTmahX/\nns3DMy8gDwbbrI1YW0KGH75NBp/xlCHidyG9xy1l0GJmEGOLMRB1FUPkrNQt+8bE\nb6irqMa3ylsLqBs3qhleSdDZswjmHwwibfr/CKRg00yRQ4ss0MZMkrMIHr4J52n4\n1RlHrlkXgwKBgQCr5UV7UXL2+nsn6x3cLumDwF7VVM6sA2tybpFeeHIm87KRo0lb\nj6Vx9byG0XvOrICGwiD3/7MbgYDIDFfnn7okZh8eWQVl2IHdzY83N1TqHJOe3tDZ\nGh21TlR0KO8rh5ufWWTIDhyvPP03IP0n+BoTcE6STcVIZdgcPcvL+GFxgQKBgQCR\nJRn9PxLm5trvDk+iLupxeYCdGJir3ILQ9Ra+vKs1UJHDcR4NWtI+WRrfp9aCTv92\nQ3Q2GsapX9awHqc+qv8Wp/FK0fJMzOmyUW/f43xk4rXqcrmuw9LGBfz1p8KCRhog\nPODtr8ZJt38a/jEREqr6loQrGi6VjbTmiZUObQ0ptQKBgDQaPBC4sgsUlicxyc9s\nsEr2Drel3vhcHkSD09vXP8nuyQDHJl/XhgCr9zjAuAyfvQHnM/gEceMnojx34nO8\nvqD9AO3gYdK5XAQFOMMpnjWO5HZT73gLRH+ERE7MlVe5KYGgFx0z7yM0G+kxlQHK\n1bS29whlOa4djDvX7UnHniFm\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@jihan1122.iam.gserviceaccount.com",
+  "client_id": "101343669719122672902",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40jihan1122.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
+"""
+
+try:
+    cred_dict = json.loads(firebase_credentials_json)
+    cred = credentials.Certificate(cred_dict)
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
+    print("✅ Firebase Connected! (Full Sync Enabled)")
+except Exception as e:
+    print(f"❌ Firebase Error: {e}")
+    db = None
