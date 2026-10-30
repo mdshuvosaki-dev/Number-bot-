@@ -11,7 +11,7 @@ from settings import (
 )
 import settings as S
 from emojis import LANG_MAP, PEM
-from telegram_api import send_message, render_body_text
+from telegram_api import send_message, render_body_text, add_brand_buttons
 from text_utils import (
     detect_language, detect_service, get_flag_and_code,
     get_flag_info_html, get_service_info_html, mask_number, extract_otp_code
@@ -137,6 +137,7 @@ def panel_monitor_thread():
                                         kb.append(temp_row)
                                         temp_row = []
                                 if temp_row: kb.append(temp_row)
+                                kb = add_brand_buttons(kb)
                                 send_message(fw["chat_id"], display_msg, reply_markup={"inline_keyboard": kb})
 
                             owners = []
@@ -243,6 +244,7 @@ def global_sms_listener():
                                             kb.append(temp_row)
                                             temp_row = []
                                     if temp_row: kb.append(temp_row)
+                                    kb = add_brand_buttons(kb)
                                     send_message(fw["chat_id"], display_msg, reply_markup={"inline_keyboard": kb})
 
                                 owner_id = None
@@ -345,6 +347,7 @@ def mint_sms_listener():
                                             kb.append(temp_row)
                                             temp_row = []
                                     if temp_row: kb.append(temp_row)
+                                    kb = add_brand_buttons(kb)
                                     send_message(fw["chat_id"], display_msg, reply_markup={"inline_keyboard": kb})
 
                                 owner_id = None
@@ -448,6 +451,7 @@ def voltx_sms_listener():
                                             kb.append(temp_row)
                                             temp_row = []
                                     if temp_row: kb.append(temp_row)
+                                    kb = add_brand_buttons(kb)
                                     send_message(fw["chat_id"], display_msg, reply_markup={"inline_keyboard": kb})
 
                                 owner_id = None
@@ -551,6 +555,7 @@ def zenex_sms_listener():
                                             kb.append(temp_row)
                                             temp_row = []
                                     if temp_row: kb.append(temp_row)
+                                    kb = add_brand_buttons(kb)
                                     send_message(fw["chat_id"], display_msg, reply_markup={"inline_keyboard": kb})
 
                                 owner_id = None
@@ -1163,6 +1168,7 @@ def poll_otp_with_status(number_id, num_str, owner_id, api_key):
                                 kb.append(temp_row)
                                 temp_row = []
                         if temp_row: kb.append(temp_row)
+                        kb = add_brand_buttons(kb)
                         send_message(fw["chat_id"], display_msg, reply_markup={"inline_keyboard": kb})
 
                     inbox_msg = render_body_text(f"╔═══════════════╗\n║ {prem_app_html} {get_flag_info_html(display_num)} {display_num} {lang}\n╚═══════════════╝")
