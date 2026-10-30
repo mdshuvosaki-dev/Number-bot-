@@ -99,11 +99,49 @@ def safe_callback(call):
 
 
 # =========================================================
+# SPEED BOOSTERS
+# =========================================================
+def start_speed_boosters():
+    import sys, threading, time, urllib.request
+
+    # ১) ছোট থ্রেড-সুইচ ইন্টারভাল: ব্যাকগ্রাউন্ড লিসেনার ব্যস্ত থাকলেও বাটনের কাজ আগে চলবে
+    try:
+        sys.setswitchinterval(0.001)
+    except Exception:
+        pass
+
+    # ২) Telegram-এর সাথে কানেকশন সবসময় গরম রাখা (প্রতিবার নতুন TLS হ্যান্ডশেক লাগবে না)
+    def warmer():
+        while True:
+            try:
+                api_call("getMe")
+            except Exception:
+                pass
+            time.sleep(8)
+
+    # ৩) Render free instance ঘুমিয়ে পড়া ঠেকাতে নিজেই নিজের URL-এ ping
+    def self_ping():
+        url = os.environ.get("RENDER_EXTERNAL_URL")
+        if not url:
+            return
+        while True:
+            time.sleep(240)
+            try:
+                urllib.request.urlopen(url, timeout=15).read()
+            except Exception:
+                pass
+
+    threading.Thread(target=warmer, daemon=True).start()
+    threading.Thread(target=self_ping, daemon=True).start()
+
+
+# =========================================================
 # MAIN
 # =========================================================
 def main():
     # Open a port first so Render's port scan passes
     threading.Thread(target=start_web_server, daemon=True).start()
+    start_speed_boosters()
 
     # Make print() show up instantly in Render logs
     import sys
@@ -148,7 +186,7 @@ def main():
         try:
             # allowed_updates স্পষ্টভাবে দেওয়া হচ্ছে: আগের কোনো সেটিংয়ে callback_query বাদ
             # থাকলে Telegram সেটাই মনে রাখে, ফলে বাটন ক্লিক কখনো আসে না
-            params = {"timeout": 10, "allowed_updates": ["message", "callback_query"]}
+            params = {"timeout": 25, "allowed_updates": ["message", "callback_query"]}
             if offset is not None:
                 params["offset"] = offset
             updates = api_call("getUpdates", params)
