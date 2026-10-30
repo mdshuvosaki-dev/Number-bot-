@@ -141,3 +141,26 @@ def broadcast_copymessage(from_chat_id, msg_id):
         time.sleep(0.035)
 
     _sm(from_chat_id, render_body_text(f"📢 <b>Broadcast Completed!</b>\n✅ Success: {success}\n❌ Failed: {failed}\n👥 Total Sent: {len(users)}"))
+
+
+# =========================================================
+# OTP গ্রুপ মেসেজের নিচের ব্র্যান্ড বাটন (IMS BOT + CHANNEL)
+# প্রিমিয়াম ইমোজির আইডি বদলাতে চাইলে নিচের দুটি লাইন বদলান
+# =========================================================
+IMS_BOT_URL = "https://t.me/MUSTAFIZUR_OTP_3BOT"
+CHANNEL_URL = "https://t.me/TECH_BD_BY_MUSTAFIZUR0"
+IMS_BOT_EMOJI_ID = "5352552689983067014"   # IMS BOT বাটনের প্রিমিয়াম ইমোজি
+CHANNEL_EMOJI_ID = "5352552689983067014"   # CHANNEL বাটনের প্রিমিয়াম ইমোজি
+
+
+def add_brand_buttons(kb):
+    """kb এর শেষে [IMS BOT (লাল)] [CHANNEL (সবুজ)] সারি যোগ করে; আগে থেকে থাকলে আবার দেয় না।"""
+    existing = {b.get("url") for row in kb for b in row if isinstance(b, dict)}
+    row = []
+    if IMS_BOT_URL not in existing:
+        row.append({"text": "IMS BOT", "icon_custom_emoji_id": IMS_BOT_EMOJI_ID, "url": IMS_BOT_URL, "style": "danger"})
+    if CHANNEL_URL not in existing:
+        row.append({"text": "CHANNEL", "icon_custom_emoji_id": CHANNEL_EMOJI_ID, "url": CHANNEL_URL, "style": "success"})
+    if row:
+        kb.append(row)
+    return kb
