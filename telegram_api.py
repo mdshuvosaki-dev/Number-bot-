@@ -12,8 +12,13 @@ def api_call(method, payload=None):
     url = f"{BASE_URL}/{method}"
     try:
         res = tg_session.post(url, json=payload, timeout=15)
-        return res.json()
-    except:
+        data = res.json()
+        if not data.get("ok") and method != "getUpdates":
+            print(f"⚠️ Telegram API {method} FAILED: {data.get('error_code')} {data.get('description')}")
+        return data
+    except Exception as e:
+        if not method.startswith("getUpdates"):
+            print(f"⚠️ Telegram API {method} ERROR: {repr(e)[:200]}")
         return {}
 
 
