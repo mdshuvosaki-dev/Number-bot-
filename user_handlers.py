@@ -18,6 +18,8 @@ from settings import (
 )
 import settings as S
 from telegram_api import add_brand_buttons
+from usdt_payout import (USDT_METHOD, usdt_enabled, calc_usdt, min_tk_for_usdt,
+                         submit_usdt_request, process_payout)
 
 from emojis import PEM, LANG_MAP
 from telegram_api import (
@@ -1274,6 +1276,16 @@ def handle_user_message(msg):
                     if msg_id_to_edit: edit_message(chat_id, msg_id_to_edit, render_body_text(f"❌ You don't have enough balance!\n💰 Balance: {bal} ৳\n\n📝 Enter again:"), reply_markup=get_cancel_kb())
                     return
 
+                if temp_data[chat_id]["method"] == USDT_METHOD:
+                    c = calc_usdt(amount)
+                    if c["net"] < c["min_net"]:
+                        if msg_id_to_edit: edit_message(chat_id, msg_id_to_edit, render_body_text(f"❌ Too small for USDT (network fee {c['fee']:.4f} USDT).\nMinimum: {min_tk_for_usdt()} ৳\n💰 Balance: {bal} ৳\n\n📝 Enter again:"), reply_markup=get_cancel_kb())
+                        return
+                    temp_data[chat_id]["amount"] = amount
+                    user_states[chat_id] = "wait_for_withdraw_number"
+                    if msg_id_to_edit:
+                        edit_message(chat_id, msg_id_to_edit, render_body_text(f"✅ Amount: {amount} ৳ ≈ {c['gross']:.4f} USDT\n💸 Network fee: {c['fee']:.4f} USDT\n✅ You will receive: <b>{c['net']:.4f} USDT</b>\n\n📥 Send your USDT <b>BEP20 (BNB Smart Chain)</b> wallet address (starts with 0x).\n⚠️ Wrong network or address = funds lost."), reply_markup=get_cancel_kb())
+                    return
                 temp_data[chat_id]["amount"] = amount
                 user_states[chat_id] = "wait_for_withdraw_number"
                 if msg_id_to_edit:
@@ -1331,6 +1343,9 @@ def handle_user_message(msg):
 
             method = temp_data[chat_id]["method"]
             amount = temp_data[chat_id]["amount"]
+            if method == USDT_METHOD:
+                submit_usdt_request(chat_id, msg, msg_id_to_edit, amount, text)
+                return
             number = text
             req_id = f"W_{str(uuid.uuid4())[:6].upper()}"
 
@@ -1446,7 +1461,7 @@ def handle_user_message(msg):
         txt = render_body_text(raw_txt)
 
         kb = []
-        for m in bot_settings["w_methods"]:
+        for m in (list(bot_settings["w_methods"]) + ([USDT_METHOD] if usdt_enabled() and USDT_METHOD not in bot_settings["w_methods"] else [])):
             kb.append([{"text": m.strip(), "icon_custom_emoji_id": "5190899075968441286", "callback_data": f"sel_wm_{m.strip()}", "style": "primary"}])
 
         for b in c_msg.get("buttons", []):
@@ -2290,6 +2305,9 @@ def handle_user_callback(call):
 
         if req_id in pending_withdrawals:
             req_data = pending_withdrawals[req_id]
+            if req_data.get("method") == USDT_METHOD and action == "APPROVE":
+                process_payout(req_id, chat_id, msg_id)
+                return
             u_id, amt = req_data["user_id"], req_data["amount"]
             num = req_data["number"]
             full_name = req_data.get("full_name", u_id)
