@@ -85,9 +85,17 @@ def safe_message(msg):
 def safe_callback(call):
     import traceback
     try:
+        print(f"🔘 Button: {call.get('data')} from {call.get('from', {}).get('id')}")
         route_callback(call)
     except Exception:
         print("❌ route_callback ERROR:\n" + traceback.format_exc())
+    finally:
+        # কাজ শেষ, কিন্তু কেউ answer না করলে এখনই করে দিই (বাটনের ঘূর্ণি থামবে)
+        try:
+            from telegram_api import answer_callback
+            answer_callback(call["id"])
+        except Exception:
+            pass
 
 
 # =========================================================
@@ -138,10 +146,12 @@ def main():
     offset = None
     while True:
         try:
-            url = "getUpdates?timeout=10"  # must be < api_call timeout (15s)
+            # allowed_updates স্পষ্টভাবে দেওয়া হচ্ছে: আগের কোনো সেটিংয়ে callback_query বাদ
+            # থাকলে Telegram সেটাই মনে রাখে, ফলে বাটন ক্লিক কখনো আসে না
+            params = {"timeout": 10, "allowed_updates": ["message", "callback_query"]}
             if offset is not None:
-                url += f"&offset={offset}"
-            updates = api_call(url)
+                params["offset"] = offset
+            updates = api_call("getUpdates", params)
             if updates and updates.get("ok") and "result" in updates:
                 for update in updates["result"]:
                     offset = update["update_id"] + 1
