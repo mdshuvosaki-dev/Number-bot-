@@ -79,8 +79,19 @@ def main():
     # Open a port first so Render's port scan passes
     threading.Thread(target=start_web_server, daemon=True).start()
 
+    # Make print() show up instantly in Render logs
+    import sys
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
+    # Webhook active হলে getUpdates কাজ করে না, তাই আগে মুছে দিচ্ছি
+    print("deleteWebhook:", api_call("deleteWebhook", {"drop_pending_updates": False}))
+
     # Get bot username
     res = api_call("getMe")
+    print("getMe:", res)
     if res.get("ok"):
         cfg.BOT_USERNAME = res["result"]["username"]
         # also patch module-level BOT_USERNAME in user_handlers
@@ -109,14 +120,22 @@ def main():
     offset = None
     while True:
         try:
-            updates = api_call(f"getUpdates?timeout=50&offset={offset}")
-            if updates and "result" in updates:
+            url = "getUpdates?timeout=10"  # must be < api_call timeout (15s)
+            if offset is not None:
+                url += f"&offset={offset}"
+            updates = api_call(url)
+            if updates and updates.get("ok") and "result" in updates:
                 for update in updates["result"]:
                     offset = update["update_id"] + 1
                     if "message" in update:
                         executor.submit(handle_user_message, update["message"])
                     elif "callback_query" in update:
                         executor.submit(route_callback, update["callback_query"])
+            elif not updates:
+                time.sleep(1)
+            else:
+                print(f"⚠️ getUpdates failed: {updates}")
+                time.sleep(3)
         except Exception as e:
             print(f"⚠️ Polling error: {e}")
             time.sleep(2)
