@@ -24,7 +24,7 @@ def api_call(method, payload=None):
     url = f"{BASE_URL}/{method}"
     try:
         sess = poll_session if method == "getUpdates" else tg_session
-        res = sess.post(url, json=payload, timeout=15)
+        res = sess.post(url, json=payload, timeout=(5, 40 if method == "getUpdates" else 15))
         data = res.json()
         if not data.get("ok") and method != "getUpdates":
             print(f"⚠️ Telegram API {method} FAILED: {data.get('error_code')} {data.get('description')}")
