@@ -17,6 +17,7 @@ from settings import (
     processed_otps, all_known_users, recent_traffic
 )
 import settings as S
+from telegram_api import add_brand_buttons
 
 from emojis import PEM, LANG_MAP
 from telegram_api import (
@@ -349,6 +350,7 @@ def handle_user_message(msg):
                         kb.append(temp_row)
                         temp_row = []
                 if temp_row: kb.append(temp_row)
+                kb = add_brand_buttons(kb)
                 send_message(fw["chat_id"], msg_text, reply_markup={"inline_keyboard": kb})
 
             send_message(chat_id, render_body_text(f"{PEM['ok']} Test message formatted and sent to all Forward Groups!"), reply_markup=main_menu(chat_id))
