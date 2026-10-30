@@ -72,6 +72,24 @@ def start_web_server():
     server.serve_forever()
 
 
+def safe_message(msg):
+    """handle_user_message এর error লগে দেখানোর জন্য (executor error লুকিয়ে ফেলে)"""
+    import traceback
+    try:
+        print(f"📩 Message from {msg.get('chat', {}).get('id')}: {msg.get('text')}")
+        handle_user_message(msg)
+    except Exception:
+        print("❌ handle_user_message ERROR:\n" + traceback.format_exc())
+
+
+def safe_callback(call):
+    import traceback
+    try:
+        route_callback(call)
+    except Exception:
+        print("❌ route_callback ERROR:\n" + traceback.format_exc())
+
+
 # =========================================================
 # MAIN
 # =========================================================
@@ -128,9 +146,9 @@ def main():
                 for update in updates["result"]:
                     offset = update["update_id"] + 1
                     if "message" in update:
-                        executor.submit(handle_user_message, update["message"])
+                        executor.submit(safe_message, update["message"])
                     elif "callback_query" in update:
-                        executor.submit(route_callback, update["callback_query"])
+                        executor.submit(safe_callback, update["callback_query"])
             elif not updates:
                 time.sleep(1)
             else:
