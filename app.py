@@ -44,9 +44,41 @@ def route_callback(call):
 
 
 # =========================================================
+# KEEP-ALIVE WEB SERVER (Render Web Service needs an open port)
+# =========================================================
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+def start_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+    print(f"🌐 Web server listening on port {port}")
+    server.serve_forever()
+
+
+# =========================================================
 # MAIN
 # =========================================================
 def main():
+    # Open a port first so Render's port scan passes
+    threading.Thread(target=start_web_server, daemon=True).start()
+
     # Get bot username
     res = api_call("getMe")
     if res.get("ok"):
