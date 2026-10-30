@@ -1,11 +1,12 @@
 import json
+import os
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 # ==========================================
 # Configuration (Token & Owner ID)
 # ==========================================
-TOKEN = "8883386833:AAHZXPssYenrKnn5gerOU4KFcpbYwZ64m30"
+TOKEN = os.environ.get("BOT_TOKEN") or "8883386833:AAHZXPssYenrKnn5gerOU4KFcpbYwZ64m30"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 FILE_URL = f"https://api.telegram.org/file/bot{TOKEN}/"
 
@@ -39,11 +40,20 @@ firebase_credentials_json = r"""
 """
 
 try:
-    cred_dict = json.loads(firebase_credentials_json)
+    # Render Environment-এর FIREBASE_CREDENTIALS (পুরো JSON) আগে ব্যবহার হবে
+    _env_cred = os.environ.get("FIREBASE_CREDENTIALS")
+    cred_dict = json.loads(_env_cred if _env_cred else firebase_credentials_json)
     cred = credentials.Certificate(cred_dict)
     firebase_admin.initialize_app(cred)
     db = firestore.client()
-    print("✅ Firebase Connected! (Full Sync Enabled)")
+    # দ্রুত পরীক্ষা: key অকার্যকর হলে ৩০০ সেকেন্ড অপেক্ষা না করে ১০ সেকেন্ডে জানাবে
+    try:
+        list(db.collection("users").limit(1).stream(retry=None, timeout=10))
+        print("✅ Firebase Connected! (Full Sync Enabled)")
+    except Exception as _fe:
+        print(f"❌ Firebase KEY/AUTH FAILED: {_fe}")
+        print("➡️ নতুন service account key দিন (Render Environment: FIREBASE_CREDENTIALS)")
+        db = None
 except Exception as e:
     print(f"❌ Firebase Error: {e}")
     db = None
