@@ -5,13 +5,26 @@ from config import BASE_URL, FILE_URL, TOKEN
 from emojis import GLOBAL_BODY_EMOJIS
 import re
 
+from requests.adapters import HTTPAdapter
+
+# বড় connection pool + keep-alive: একসাথে অনেক ক্লিক এলেও কেউ লাইনে দাঁড়িয়ে থাকবে না
 tg_session = requests.Session()
+_adapter = HTTPAdapter(pool_connections=20, pool_maxsize=200, max_retries=0)
+tg_session.mount("https://", _adapter)
+tg_session.mount("http://", _adapter)
+
+# long-poll (getUpdates) এর জন্য আলাদা session, যাতে অন্য কলের পথ আটকে না যায়
+poll_session = requests.Session()
+poll_session.mount("https://", HTTPAdapter(pool_connections=2, pool_maxsize=2, max_retries=0))
+
+_answered = set()
 
 
 def api_call(method, payload=None):
     url = f"{BASE_URL}/{method}"
     try:
-        res = tg_session.post(url, json=payload, timeout=15)
+        sess = poll_session if method == "getUpdates" else tg_session
+        res = sess.post(url, json=payload, timeout=15)
         data = res.json()
         if not data.get("ok") and method != "getUpdates":
             print(f"⚠️ Telegram API {method} FAILED: {data.get('error_code')} {data.get('description')}")
@@ -51,7 +64,17 @@ def delete_message(chat_id, message_id):
 
 
 def answer_callback(callback_id, text="", show_alert=False):
+    # প্রতিটি callback একবারই answer করা যায়; আগেই করা হলে আবার করব না
+    if callback_id in _answered:
+        return
+    _answered.add(callback_id)
+    if len(_answered) > 5000:
+        _answered.clear()
     api_call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text, "show_alert": show_alert})
+
+
+def callback_answered(callback_id):
+    return callback_id in _answered
 
 
 def send_document(chat_id, filename, text_content):
