@@ -18,6 +18,7 @@ from settings import (
 )
 import settings as S
 from telegram_api import add_brand_buttons
+from msg_format import broadcast_new_stock, build_alloc_view
 from usdt_payout import (USDT_METHOD, usdt_enabled, calc_usdt, min_tk_for_usdt,
                          submit_usdt_request, process_payout)
 
@@ -545,22 +546,10 @@ def handle_user_message(msg):
             app_full_name, prem_app_html = get_service_info_html(service)
             prem_flag_html = get_flag_info_html(clean_nums[0]) if clean_nums else f"{PEM['world']} "
 
-            broadcast_txt = f"➖➖➖➖➖➖➖➖\n《 NEW NUMBERS 》\n➖➖➖➖➖➖➖➖\n{prem_flag_html} {country} {prem_app_html} {service}\n➖➖➖➖➖➖➖➖\n📤 Total Added: <b>{len(clean_nums)}</b>\n💰 Reward: <b>{rate} TK</b>\n➖➖➖➖➖➖➖➖\nUse /start to get your numbers!"
-            broadcast_txt = render_body_text(broadcast_txt)
-
             send_message(chat_id, render_body_text(f"{PEM['ok']} Numbers added to local stock with {rate} TK rate! Starting broadcast..."))
 
-            def simple_broadcast(txt):
-                b_session = requests.Session()
-                url = f"{BASE_URL}/sendMessage"
-                for u_id in list(S.all_known_users):
-                    try:
-                        b_session.post(url, json={"chat_id": u_id, "text": txt, "parse_mode": "HTML", "disable_web_page_preview": True}, timeout=5)
-                    except:
-                        pass
-                    time.sleep(0.035)
-            import threading
-            threading.Thread(target=simple_broadcast, args=(broadcast_txt,)).start()
+            # সবার কাছে "NEW STOCK ADDED" টেবিল-কার্ড + NUMBER BOT বাটন
+            broadcast_new_stock(S.all_known_users, country, service, len(clean_nums), prem_flag_html, prem_app_html)
 
             del user_states[chat_id]
             del temp_data[chat_id]
@@ -1248,7 +1237,7 @@ def handle_user_message(msg):
             kb.append([{"text": "OTP Group", "icon_custom_emoji_id": "5190447043545438788", "url": bot_settings["otp_link"], "style": "primary"}])
 
             custom_star_html = f'<tg-emoji emoji-id="5305517382138112561">⭐️</tg-emoji>'
-            text_numbers = render_body_text(f"{country_emoji_html} {custom_star_html} NEW NUMBER\n")
+            text_numbers, kb = build_alloc_view(kb, fetched_nums, country_emoji_html, bot_settings["otp_link"])
 
             if wait_msg_id:
                 edit_message(chat_id, wait_msg_id, text_numbers, reply_markup={"inline_keyboard": kb})
@@ -1610,9 +1599,9 @@ def handle_user_callback(call):
             text_to_full[clean_n] = clean_n
             text_to_full[national_n] = clean_n
 
-        new_cc_text = "Remove CC" if is_add else "Add CC"
+        new_cc_text = "Remove Country Code" if is_add else "Add Country Code"
         new_cc_icon = "5422557736330106570" if is_add else "5420323438508155202"
-        new_cc_style = "danger" if is_add else "success"
+        new_cc_style = "primary"
         new_cc_cb = "del_cc_all" if is_add else "add_cc_all"
 
         try:
@@ -2159,7 +2148,7 @@ def handle_user_callback(call):
 
             kb.append([{"text": "OTP Group", "icon_custom_emoji_id": "5190447043545438788", "url": bot_settings["otp_link"], "style": "primary"}])
 
-            text_numbers = render_body_text(f"{country_emoji_html} NEW NUMBER\n")
+            text_numbers, kb = build_alloc_view(kb, fetched_nums, country_emoji_html, bot_settings["otp_link"])
             edit_message(chat_id, wait_msg_id, text_numbers, reply_markup={"inline_keyboard": kb})
             user_active_sessions[chat_id] = {"msg_id": wait_msg_id, "nums": fetched_nums}
             return
@@ -2281,7 +2270,7 @@ def handle_user_callback(call):
         kb.append([{"text": "Change Country", "icon_custom_emoji_id": "5305517382138112561", "callback_data": f"g_s_{service}", "style": "danger"}])
         kb.append([{"text": "OTP Group", "icon_custom_emoji_id": "5190447043545438788", "url": bot_settings["otp_link"], "style": "primary"}])
 
-        text_numbers = render_body_text(f"{country_emoji_html} NEW NUMBER\n")
+        text_numbers, kb = build_alloc_view(kb, fetched_nums, country_emoji_html, bot_settings["otp_link"])
         try:
             edit_message(chat_id, msg_id, text_numbers, reply_markup={"inline_keyboard": kb})
             user_active_sessions[chat_id] = {"msg_id": msg_id, "nums": fetched_nums}
