@@ -22,7 +22,7 @@ FALLBACK_BOT = "MUSTAFIZUR_OTP_3BOT"
 
 
 def _bot_url():
-    uname = (getattr(cfg, "MUSTAFIZUR_OTP_3BOT", "") or FALLBACK_BOT).lstrip("@")
+    uname = (getattr(cfg, "BOT_USERNAME", "") or FALLBACK_BOT).lstrip("@")
     return f"https://t.me/{uname}"
 
 
@@ -39,7 +39,7 @@ def _emoji_id(emoji_html):
 ICON_BELL = "🔔"
 ICON_COUNTRY = PEM["world"]
 ICON_SERVICE = "🤖"
-ICON_QUANTITY = "📈"
+ICON_QUANTITY = '<tg-emoji emoji-id="5352877703043258544">📈</tg-emoji>'
 DEFAULT_BTN_ICON_ID = "5336972142066047577"   # ফ্ল্যাগের প্রিমিয়াম আইডি না থাকলে বাটনে এই আইকন
 
 ISO_NAMES = {
@@ -143,15 +143,28 @@ def _country_info(country, first_number):
     return str(name).upper(), flag
 
 
+def _icons():
+    """অ্যাডমিন /seticons দিয়ে প্রিমিয়াম ইমোজি সেট করলে সেগুলো, নইলে ডিফল্ট।"""
+    ids = S.bot_settings.get("stock_icons") or []
+
+    def mk(i, char, default):
+        if len(ids) > i and ids[i]:
+            return f'<tg-emoji emoji-id="{ids[i]}">{char}</tg-emoji>'
+        return default
+    return (mk(0, "🔔", ICON_BELL), mk(1, "🌐", ICON_COUNTRY),
+            mk(2, "🤖", ICON_SERVICE), mk(3, "📈", ICON_QUANTITY))
+
+
 def _stock_html(cname, sname, qty, flag_html, app_html):
     c = _html.escape(cname)
     s = _html.escape(sname)
+    bell, ic_c, ic_s, ic_q = _icons()
     return (
-        f"<h3>{ICON_BELL} NEW STOCK ADDED</h3>"
+        f"<h3>{bell} NEW STOCK ADDED</h3>"
         f"<table bordered>"
-        f"<tr><th>{ICON_COUNTRY} COUNTRY</th><td>{flag_html} {c}</td></tr>"
-        f"<tr><th>{ICON_SERVICE} SERVICE</th><td>{app_html} {s}</td></tr>"
-        f"<tr><th>{ICON_QUANTITY} QUANTITY</th><td>{qty}</td></tr>"
+        f"<tr><th>{ic_c} COUNTRY</th><td>{flag_html} {c}</td></tr>"
+        f"<tr><th>{ic_s} SERVICE</th><td>{app_html} {s}</td></tr>"
+        f"<tr><th>{ic_q} QUANTITY</th><td>{qty}</td></tr>"
         f"</table>"
     )
 
@@ -159,12 +172,57 @@ def _stock_html(cname, sname, qty, flag_html, app_html):
 def _stock_fallback(cname, sname, qty, flag_html, app_html):
     c = _html.escape(cname)
     s = _html.escape(sname)
+    bell, ic_c, ic_s, ic_q = _icons()
     return render_body_text(
-        f"{ICON_BELL} <b>NEW STOCK ADDED</b>\n\n"
-        f"<blockquote>{ICON_COUNTRY} <b>COUNTRY</b>   {flag_html} {c}\n"
-        f"{ICON_SERVICE} <b>SERVICE</b>   {app_html} {s}\n"
-        f"{ICON_QUANTITY} <b>QUANTITY</b>   {qty}</blockquote>"
+        f"{bell} <b>NEW STOCK ADDED</b>\n\n"
+        f"<blockquote>{ic_c} <b>COUNTRY</b>   {flag_html} {c}\n"
+        f"{ic_s} <b>SERVICE</b>   {app_html} {s}\n"
+        f"{ic_q} <b>QUANTITY</b>   {qty}</blockquote>"
     )
+
+
+# ---------------------------------------------------------------------
+# অ্যাডমিন কমান্ড: /emojiid  এবং  /seticons
+# ---------------------------------------------------------------------
+def _custom_ids(msg):
+    ents = [e for e in (msg.get("entities") or []) if e.get("type") == "custom_emoji"]
+    ents.sort(key=lambda e: e.get("offset", 0))
+    return [e["custom_emoji_id"] for e in ents if e.get("custom_emoji_id")]
+
+
+def handle_emoji_cmd(chat_id, msg):
+    """/emojiid <প্রিমিয়াম ইমোজি>  -> আইডি দেখায়  |  /seticons <৪টি প্রিমিয়াম ইমোজি>  -> কার্ডের আইকন সেট করে"""
+    from telegram_api import send_message
+    text = msg.get("text", "")
+    ids = _custom_ids(msg)
+    if text.startswith("/emojiid"):
+        if not ids:
+            send_message(chat_id, "Send: /emojiid followed by premium emoji(s)")
+            return
+        send_message(chat_id, "\n".join(f"<code>{i}</code>" for i in ids), parse_mode="HTML") \
+            if _accepts_parse_mode() else send_message(chat_id, "\n".join(ids))
+        return
+    # /seticons
+    if len(ids) < 4:
+        send_message(chat_id, render_body_text(
+            "Usage: /seticons then 4 PREMIUM emojis in this order:\n"
+            "1) bell  2) country  3) service  4) quantity\n"
+            "Example: /seticons 🔔 🌐 🤖 📈 (pick them from the premium emoji keyboard)"))
+        return
+    S.bot_settings["stock_icons"] = ids[:4]
+    try:
+        from database import save_db
+        save_db()
+    except Exception:
+        pass
+    bell, ic_c, ic_s, ic_q = _icons()
+    send_message(chat_id, render_body_text(f"✅ Stock card icons saved!\n{bell} {ic_c} {ic_s} {ic_q}"))
+
+
+def _accepts_parse_mode():
+    import inspect
+    from telegram_api import send_message
+    return "parse_mode" in inspect.signature(send_message).parameters
 
 
 def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html, first_number=None):
