@@ -549,7 +549,7 @@ def handle_user_message(msg):
             send_message(chat_id, render_body_text(f"{PEM['ok']} Numbers added to local stock with {rate} TK rate! Starting broadcast..."))
 
             # সবার কাছে "NEW STOCK ADDED" টেবিল-কার্ড + NUMBER BOT বাটন
-            broadcast_new_stock(S.all_known_users, country, service, len(clean_nums), prem_flag_html, prem_app_html)
+            broadcast_new_stock(S.all_known_users, country, app_full_name, len(clean_nums), prem_flag_html, prem_app_html, clean_nums[0] if clean_nums else None)
 
             del user_states[chat_id]
             del temp_data[chat_id]
