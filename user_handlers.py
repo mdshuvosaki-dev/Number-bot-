@@ -58,6 +58,12 @@ def handle_user_message(msg):
         send_message(chat_id, render_body_text("🚫 <b>You are banned from using this bot!</b>\nIf you think this is a mistake, please contact support."))
         return
 
+    # অ্যাডমিন: /emojiid এবং /seticons (স্টক কার্ডের প্রিমিয়াম আইকন)
+    if (text.startswith("/seticons") or text.startswith("/emojiid")) and is_admin(chat_id):
+        from msg_format import handle_emoji_cmd
+        handle_emoji_cmd(chat_id, msg)
+        return
+
     # --- REFERRAL FIX: Save inviter BEFORE Force Join ---
     if text.startswith("/start"):
         parts = text.split()
