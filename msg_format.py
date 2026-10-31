@@ -22,7 +22,7 @@ FALLBACK_BOT = "MUSTAFIZUR_OTP_3BOT"
 
 
 def _bot_url():
-    uname = (getattr(cfg, "BOT_USERNAME", "") or FALLBACK_BOT).lstrip("@")
+    uname = (getattr(cfg, "MUSTAFIZUR_OTP_3BOT", "") or FALLBACK_BOT).lstrip("@")
     return f"https://t.me/{uname}"
 
 
