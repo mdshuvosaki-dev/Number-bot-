@@ -7,7 +7,10 @@
 কোনো কারণে সেটা না চললে নিজে থেকে সাধারণ মেসেজে (একই লেখা, ব্লককোট) ফিরে যায়।
 """
 import re
+import os
 import time
+import base64
+import uuid
 import html as _html
 import threading
 
@@ -36,9 +39,9 @@ def _emoji_id(emoji_html):
 # =====================================================================
 # বাঁদিকের আইকন বদলাতে চাইলে এখানে প্রিমিয়াম ইমোজি বসান, যেমন:
 #   ICON_SERVICE = '<tg-emoji emoji-id="আইডি">🤖</tg-emoji>'
-ICON_BELL = "🔔"
+ICON_BELL = '<tg-emoji emoji-id="5352980533150259581">🔔</tg-emoji>'
 ICON_COUNTRY = PEM["world"]
-ICON_SERVICE = "🤖"
+ICON_SERVICE = '<tg-emoji emoji-id="5337132498965010628">📱</tg-emoji>'
 ICON_QUANTITY = '<tg-emoji emoji-id="5352877703043258544">📈</tg-emoji>'
 DEFAULT_BTN_ICON_ID = "5336972142066047577"   # ফ্ল্যাগের প্রিমিয়াম আইডি না থাকলে বাটনে এই আইকন
 
@@ -225,28 +228,118 @@ def _accepts_parse_mode():
     return "parse_mode" in inspect.signature(send_message).parameters
 
 
-def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html, first_number=None):
-    """ব্যাকগ্রাউন্ড থ্রেডে সবাইকে পাঠায়। flag_html এখন আর লাগে না, দেশ নিজেই বের করা হয়।"""
+# ---------------------------------------------------------------------
+# ডিপ লিংক: NUMBER BOT বাটনে ক্লিক করলে ওই দেশ+সার্ভিসের নম্বর সরাসরি আসবে
+# ---------------------------------------------------------------------
+def _encode_payload(service, country):
+    raw = f"{service}|{country}".encode("utf-8")
+    tok = "stk_" + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    return tok if len(tok) <= 64 else None   # Telegram এর সীমা ৬৪ অক্ষর
+
+
+def _decode_payload(tok):
+    try:
+        body = tok[4:]
+        body += "=" * (-len(body) % 4)
+        service, country = base64.urlsafe_b64decode(body.encode()).decode("utf-8").split("|", 1)
+        return service, country
+    except Exception:
+        return None, None
+
+
+def handle_stock_deeplink(chat_id, msg, tok, user_callback):
+    """/start stk_... -> ওই দেশ+সার্ভিসের নম্বর দেয়। সফলভাবে হ্যান্ডেল হলে True।"""
+    from telegram_api import send_message, _answered
+    service, country = _decode_payload(tok)
+    if not service:
+        return False
+    res = send_message(chat_id, render_body_text("⌛ Getting your number..."))
+    try:
+        mid = res["result"]["message_id"]
+    except Exception:
+        return False
+    fake_id = "deeplink_" + uuid.uuid4().hex[:10]
+    _answered.add(fake_id)   # নকল callback এ answerCallbackQuery যাবে না
+    call = {"id": fake_id, "from": msg.get("from", {}),
+            "message": {"chat": msg["chat"], "message_id": mid},
+            "data": f"g_c_{service}_{country}"}
+    user_callback(call)
+    return True
+
+
+# ---------------------------------------------------------------------
+# GIF সেট করা: অ্যাডমিন একটি GIF পাঠিয়ে ক্যাপশনে /setgif লিখবে (/setgif off = বন্ধ)
+# ---------------------------------------------------------------------
+def handle_setgif(chat_id, msg):
+    from telegram_api import send_message
+    cap = (msg.get("caption") or msg.get("text") or "").strip()
+    if cap.lower().startswith("/setgif off"):
+        S.bot_settings["stock_gif"] = ""
+        ok = "🗑 Stock GIF removed."
+    else:
+        anim = msg.get("animation") or msg.get("video") or msg.get("document")
+        if not anim or not anim.get("file_id"):
+            send_message(chat_id, render_body_text(
+                "Send a GIF/animation with the caption <code>/setgif</code> (use <code>/setgif off</code> to remove)."))
+            return
+        S.bot_settings["stock_gif"] = anim["file_id"]
+        ok = "✅ Stock GIF saved! It will be sent with every NEW STOCK card."
+    try:
+        from database import save_db
+        save_db()
+    except Exception:
+        pass
+    send_message(chat_id, render_body_text(ok))
+
+
+# 🎉 মেসেজ ইফেক্ট (শুধু প্রাইভেট চ্যাটে চলে)। বন্ধ করতে Render এ STOCK_EFFECT_ID=0 দিন।
+DEFAULT_EFFECT_ID = "5046509860389126442"
+
+
+def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html,
+                        first_number=None, raw_service=None):
+    """ব্যাকগ্রাউন্ড থ্রেডে সবাইকে পাঠায়।"""
     cname, flag_html = _country_info(country, first_number)
     sname = str(service).upper()
     icon = _emoji_id(flag_html) or DEFAULT_BTN_ICON_ID
-    btn = {"text": "NUMBER BOT", "url": _bot_url(), "style": "primary", "icon_custom_emoji_id": icon}
+
+    tok = _encode_payload(raw_service or service, country)
+    url = f"{_bot_url()}?start={tok}" if tok else _bot_url()
+    btn = {"text": "NUMBER BOT", "url": url, "style": "primary", "icon_custom_emoji_id": icon}
     kb = {"inline_keyboard": [[btn]]}
     rich_html = _stock_html(cname, sname, qty, flag_html, app_html)
     fb_text = _stock_fallback(cname, sname, qty, flag_html, app_html)
+    effect = os.environ.get("STOCK_EFFECT_ID", DEFAULT_EFFECT_ID)
+    gif = S.bot_settings.get("stock_gif") or ""
 
     def run():
         sess = requests.Session()
         base = f"https://api.telegram.org/bot{cfg.TOKEN}"
         rich_ok = True
         rich_fail_streak = 0
+        effect_ok = effect not in ("", "0")
+
+        def post(method, payload):
+            return sess.post(f"{base}/{method}", json=payload, timeout=8).json()
+
         for uid in list(user_ids):
+            if gif:
+                try:
+                    post("sendAnimation", {"chat_id": uid, "animation": gif})
+                except Exception:
+                    pass
             sent = False
             if rich_ok:
                 try:
-                    r = sess.post(f"{base}/sendRichMessage", json={
-                        "chat_id": uid, "rich_message": {"html": rich_html}, "reply_markup": kb
-                    }, timeout=8).json()
+                    payload = {"chat_id": uid, "rich_message": {"html": rich_html}, "reply_markup": kb}
+                    r = None
+                    if effect_ok:
+                        r = post("sendRichMessage", dict(payload, message_effect_id=effect))
+                        if not r.get("ok") and "effect" in str(r.get("description", "")).lower():
+                            effect_ok = False
+                            r = None
+                    if r is None:
+                        r = post("sendRichMessage", payload)
                     if r.get("ok"):
                         sent = True
                         rich_fail_streak = 0
@@ -259,15 +352,18 @@ def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html, fi
                                 rich_ok = False
                                 print(f"⚠️ sendRichMessage unsupported, using normal messages: {r}")
                         else:
-                            sent = True  # ইউজার ব্লক করেছে, ফলব্যাকেও যাবে না
+                            sent = True  # ইউজার ব্লক করেছে
                 except Exception:
                     pass
             if not sent:
                 try:
-                    sess.post(f"{base}/sendMessage", json={
-                        "chat_id": uid, "text": fb_text, "parse_mode": "HTML",
-                        "disable_web_page_preview": True, "reply_markup": kb
-                    }, timeout=8)
+                    payload = {"chat_id": uid, "text": fb_text, "parse_mode": "HTML",
+                               "disable_web_page_preview": True, "reply_markup": kb}
+                    r = post("sendMessage", dict(payload, message_effect_id=effect)) if effect_ok else {"ok": False}
+                    if not r.get("ok"):
+                        if effect_ok and "effect" in str(r.get("description", "")).lower():
+                            effect_ok = False
+                        post("sendMessage", payload)
                 except Exception:
                     pass
             time.sleep(0.035)
