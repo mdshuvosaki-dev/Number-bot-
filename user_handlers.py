@@ -517,9 +517,24 @@ def handle_user_message(msg):
             file_path = file_info["result"]["file_path"]
             file_content = requests.get(f"{FILE_URL}{file_path}").text
 
-            temp_data[chat_id] = {"numbers": file_content.splitlines(), "filename": doc["file_name"]}
+            # শুধু আসল ফোন নম্বর রাখি (৭-১৫ সংখ্যা); ভুল ফাইল (যেমন ইমোজি/ফ্ল্যাগের TXT) আটকে দিই
+            import re as _re
+            good_nums, bad_count = [], 0
+            for _ln in file_content.splitlines():
+                _t = _re.sub(r"[\s\-()]", "", _ln.strip())
+                if not _t:
+                    continue
+                if _re.fullmatch(r"\+?\d{7,15}", _t):
+                    good_nums.append(_t)
+                else:
+                    bad_count += 1
+            if not good_nums:
+                send_message(chat_id, render_body_text(f"{PEM['no']} No valid phone numbers found in this file ({bad_count} invalid lines).\nEach line must be a number like <code>22912345678</code>. Please upload the correct .txt file."), reply_markup=get_cancel_kb())
+                return
+
+            temp_data[chat_id] = {"numbers": good_nums, "filename": doc["file_name"]}
             user_states[chat_id] = "wait_for_service"
-            send_message(chat_id, render_body_text(f"{PEM['ok']} File received.\n\n📌 Enter the service name (e.g., WHATSAPP):"), reply_markup=get_cancel_kb())
+            send_message(chat_id, render_body_text(f"{PEM['ok']} File received: {len(good_nums)} valid numbers" + (f" ({bad_count} invalid lines skipped)" if bad_count else "") + "\n\n📌 Enter the service name (e.g., WHATSAPP):"), reply_markup=get_cancel_kb())
             return
 
         elif state == "wait_for_service" and text:
