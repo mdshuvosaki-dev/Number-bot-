@@ -58,6 +58,16 @@ def handle_user_message(msg):
         send_message(chat_id, render_body_text("🚫 <b>You are banned from using this bot!</b>\nIf you think this is a mistake, please contact support."))
         return
 
+    # অ্যাডমিন: GIF সেট (GIF পাঠিয়ে ক্যাপশনে /setgif)
+    if (msg.get("caption") or "").strip().startswith("/setgif") and is_admin(chat_id):
+        from msg_format import handle_setgif
+        handle_setgif(chat_id, msg)
+        return
+    if text.startswith("/setgif") and is_admin(chat_id):
+        from msg_format import handle_setgif
+        handle_setgif(chat_id, msg)
+        return
+
     # অ্যাডমিন: /emojiid এবং /seticons (স্টক কার্ডের প্রিমিয়াম আইকন)
     if (text.startswith("/seticons") or text.startswith("/emojiid")) and is_admin(chat_id):
         from msg_format import handle_emoji_cmd
@@ -79,6 +89,12 @@ def handle_user_message(msg):
     if not check_force_join(chat_id):
         send_force_join_msg(chat_id)
         return
+
+    # NUMBER BOT বাটনের ডিপ লিংক: /start stk_... -> সরাসরি ওই দেশের নম্বর
+    if text.startswith("/start ") and len(text.split()) > 1 and text.split()[1].startswith("stk_"):
+        from msg_format import handle_stock_deeplink
+        if handle_stock_deeplink(chat_id, msg, text.split()[1], handle_user_callback):
+            return
 
     MAIN_MENU_CMDS = ["GET NUMBER", "Search Number", "TRAFFIC", "Refer", "WITHDRAWAL", "SUPPORT", "Admin Panel", "2FA ONLINE"]
 
@@ -555,7 +571,7 @@ def handle_user_message(msg):
             send_message(chat_id, render_body_text(f"{PEM['ok']} Numbers added to local stock with {rate} TK rate! Starting broadcast..."))
 
             # সবার কাছে "NEW STOCK ADDED" টেবিল-কার্ড + NUMBER BOT বাটন
-            broadcast_new_stock(S.all_known_users, country, app_full_name, len(clean_nums), prem_flag_html, prem_app_html, clean_nums[0] if clean_nums else None)
+            broadcast_new_stock(S.all_known_users, country, app_full_name, len(clean_nums), prem_flag_html, prem_app_html, clean_nums[0] if clean_nums else None, raw_service=service)
 
             del user_states[chat_id]
             del temp_data[chat_id]
