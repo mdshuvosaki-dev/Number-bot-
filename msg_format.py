@@ -172,6 +172,15 @@ def _stock_html(cname, sname, qty, flag_html, app_html):
     )
 
 
+def _stock_html_inbtn(cname, sname, qty, flag_html, app_html, url, btn_icon_html):
+    """টেবিলের নিচে সাদা বক্সের ভেতরেই NUMBER BOT বাটন (tg-button)।"""
+    base = _stock_html(cname, sname, qty, flag_html, app_html)
+    u = _html.escape(url, quote=True)
+    return (base +
+            f'<tg-button-row align="center"><tg-button type="url" url="{u}" style="primary">'
+            f'{btn_icon_html} NUMBER BOT</tg-button></tg-button-row>')
+
+
 def _stock_fallback(cname, sname, qty, flag_html, app_html):
     c = _html.escape(cname)
     s = _html.escape(sname)
@@ -193,24 +202,66 @@ def _custom_ids(msg):
     return [e["custom_emoji_id"] for e in ents if e.get("custom_emoji_id")]
 
 
+def _emoji_kinds(ids):
+    """getCustomEmojiStickers দিয়ে প্রতিটি আইডি অ্যানিমেটেড/ভিডিও/স্থির কি না জানায়।"""
+    out = {}
+    try:
+        for i in range(0, len(ids), 200):
+            chunk = ids[i:i + 200]
+            r = requests.post(f"https://api.telegram.org/bot{cfg.TOKEN}/getCustomEmojiStickers",
+                              json={"custom_emoji_ids": chunk}, timeout=15).json()
+            for st in r.get("result", []) or []:
+                kind = "animated" if st.get("is_animated") else ("video" if st.get("is_video") else "static")
+                out[str(st.get("custom_emoji_id"))] = (kind, st.get("emoji", ""))
+    except Exception:
+        pass
+    return out
+
+
 def handle_emoji_cmd(chat_id, msg):
-    """/emojiid <প্রিমিয়াম ইমোজি>  -> আইডি দেখায়  |  /seticons <৪টি প্রিমিয়াম ইমোজি>  -> কার্ডের আইকন সেট করে"""
+    """/emojiid <প্রিমিয়াম ইমোজি> -> আইডি + অ্যানিমেটেড কি না | /seticons <৪টি ইমোজি> | /animemojis"""
     from telegram_api import send_message
     text = msg.get("text", "")
     ids = _custom_ids(msg)
+
+    if text.startswith("/animemojis"):
+        import emojis as _E
+        pool = {}
+        for ch, i in getattr(_E, "GLOBAL_BODY_EMOJIS", {}).items():
+            pool[str(i)] = ch
+        for i in getattr(_E, "PEM", {}).values():
+            for found in re.findall(r'emoji-id="(\d+)"', str(i)):
+                pool.setdefault(found, "")
+        kinds = _emoji_kinds(list(pool.keys()))
+        if not kinds:
+            send_message(chat_id, "Could not check emoji types right now. Try again later.")
+            return
+        anim = [f"{ch or kinds[i][1]} <code>{i}</code>" for i, ch in pool.items()
+                if i in kinds and kinds[i][0] in ("animated", "video")]
+        stat = sum(1 for i in pool if i in kinds and kinds[i][0] == "static")
+        send_message(chat_id, f"🎞 Animated/video emojis in your bot: {len(anim)}  |  Static: {stat}\n\n" +
+                     ("\n".join(anim[:60]) if anim else "None of them are animated."))
+        return
+
     if text.startswith("/emojiid"):
         if not ids:
             send_message(chat_id, "Send: /emojiid followed by premium emoji(s)")
             return
-        send_message(chat_id, "\n".join(f"<code>{i}</code>" for i in ids), parse_mode="HTML") \
-            if _accepts_parse_mode() else send_message(chat_id, "\n".join(ids))
+        kinds = _emoji_kinds(ids)
+        lines = []
+        for i in ids:
+            k = kinds.get(i, ("?", ""))[0]
+            lines.append(f"<code>{i}</code>  —  {'🎞 animated' if k in ('animated', 'video') else k}")
+        send_message(chat_id, "\n".join(lines))
         return
+
     # /seticons
     if len(ids) < 4:
         send_message(chat_id, render_body_text(
             "Usage: /seticons then 4 PREMIUM emojis in this order:\n"
             "1) bell  2) country  3) service  4) quantity\n"
-            "Example: /seticons 🔔 🌐 🤖 📈 (pick them from the premium emoji keyboard)"))
+            "Example: /seticons 🔔 🌐 🤖 📈 (pick them from the premium emoji keyboard)\n"
+            "Tip: choose emojis that MOVE in the keyboard = animated. Check with /emojiid."))
         return
     S.bot_settings["stock_icons"] = ids[:4]
     try:
@@ -219,7 +270,9 @@ def handle_emoji_cmd(chat_id, msg):
     except Exception:
         pass
     bell, ic_c, ic_s, ic_q = _icons()
-    send_message(chat_id, render_body_text(f"✅ Stock card icons saved!\n{bell} {ic_c} {ic_s} {ic_q}"))
+    kinds = _emoji_kinds(ids[:4])
+    moving = sum(1 for i in ids[:4] if kinds.get(i, ("", ""))[0] in ("animated", "video"))
+    send_message(chat_id, render_body_text(f"✅ Stock card icons saved! ({moving}/4 animated)\n{bell} {ic_c} {ic_s} {ic_q}"))
 
 
 def _accepts_parse_mode():
@@ -298,7 +351,9 @@ DEFAULT_EFFECT_ID = "5046509860389126442"
 
 def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html,
                         first_number=None, raw_service=None):
-    """ব্যাকগ্রাউন্ড থ্রেডে সবাইকে পাঠায়।"""
+    """ব্যাকগ্রাউন্ড থ্রেডে সবাইকে পাঠায়।
+    ধাপ ০: Rich মেসেজ + বাটন সাদা বক্সের ভেতরে  ->  ধাপ ১: Rich + বাটন নিচে (reply_markup)
+    ->  ধাপ ২: সাধারণ মেসেজ। কোনো ধাপ না চললে নিজে থেকে পরের ধাপে নামে।"""
     cname, flag_html = _country_info(country, first_number)
     sname = str(service).upper()
     icon = _emoji_id(flag_html) or DEFAULT_BTN_ICON_ID
@@ -307,7 +362,9 @@ def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html,
     url = f"{_bot_url()}?start={tok}" if tok else _bot_url()
     btn = {"text": "NUMBER BOT", "url": url, "style": "primary", "icon_custom_emoji_id": icon}
     kb = {"inline_keyboard": [[btn]]}
-    rich_html = _stock_html(cname, sname, qty, flag_html, app_html)
+    btn_icon_html = flag_html if "tg-emoji" in flag_html else f'<tg-emoji emoji-id="{icon}">🌐</tg-emoji>'
+    html0 = _stock_html_inbtn(cname, sname, qty, flag_html, app_html, url, btn_icon_html)
+    html1 = _stock_html(cname, sname, qty, flag_html, app_html)
     fb_text = _stock_fallback(cname, sname, qty, flag_html, app_html)
     effect = os.environ.get("STOCK_EFFECT_ID", DEFAULT_EFFECT_ID)
     gif = S.bot_settings.get("stock_gif") or ""
@@ -315,12 +372,41 @@ def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html,
     def run():
         sess = requests.Session()
         base = f"https://api.telegram.org/bot{cfg.TOKEN}"
-        rich_ok = True
-        rich_fail_streak = 0
-        effect_ok = effect not in ("", "0")
+        st = {"mode": 0, "streak": 0, "effect": effect not in ("", "0")}
 
         def post(method, payload):
             return sess.post(f"{base}/{method}", json=payload, timeout=8).json()
+
+        def with_effect(method, payload):
+            """ইফেক্টসহ পাঠায়; ইফেক্ট নিয়ে সমস্যা হলে ইফেক্ট ছাড়া আবার।"""
+            if st["effect"]:
+                r = post(method, dict(payload, message_effect_id=effect))
+                if r.get("ok") or "effect" not in str(r.get("description", "")).lower():
+                    return r
+                st["effect"] = False
+            return post(method, payload)
+
+        def attempt(uid):
+            """রিটার্ন: 'ok' | 'user' (ইউজার ব্লক) | 'fail'"""
+            mode = st["mode"]
+            try:
+                if mode == 0:
+                    r = with_effect("sendRichMessage", {"chat_id": uid, "rich_message": {"html": html0}})
+                elif mode == 1:
+                    r = with_effect("sendRichMessage", {"chat_id": uid, "rich_message": {"html": html1}, "reply_markup": kb})
+                else:
+                    r = with_effect("sendMessage", {"chat_id": uid, "text": fb_text, "parse_mode": "HTML",
+                                                    "disable_web_page_preview": True, "reply_markup": kb})
+            except Exception:
+                return "fail"
+            if r.get("ok"):
+                return "ok"
+            desc = str(r.get("description", "")).lower()
+            if any(k in desc for k in ("blocked", "deactivated", "chat not found", "forbidden")):
+                return "user"
+            if mode < 2:
+                print(f"⚠️ stock card mode {mode} failed: {r}")
+            return "fail"
 
         for uid in list(user_ids):
             if gif:
@@ -328,44 +414,17 @@ def broadcast_new_stock(user_ids, country, service, qty, flag_html, app_html,
                     post("sendAnimation", {"chat_id": uid, "animation": gif})
                 except Exception:
                     pass
-            sent = False
-            if rich_ok:
-                try:
-                    payload = {"chat_id": uid, "rich_message": {"html": rich_html}, "reply_markup": kb}
-                    r = None
-                    if effect_ok:
-                        r = post("sendRichMessage", dict(payload, message_effect_id=effect))
-                        if not r.get("ok") and "effect" in str(r.get("description", "")).lower():
-                            effect_ok = False
-                            r = None
-                    if r is None:
-                        r = post("sendRichMessage", payload)
-                    if r.get("ok"):
-                        sent = True
-                        rich_fail_streak = 0
-                    else:
-                        desc = str(r.get("description", "")).lower()
-                        user_side = any(k in desc for k in ("blocked", "deactivated", "chat not found", "forbidden"))
-                        if not user_side:
-                            rich_fail_streak += 1
-                            if rich_fail_streak >= 3:
-                                rich_ok = False
-                                print(f"⚠️ sendRichMessage unsupported, using normal messages: {r}")
-                        else:
-                            sent = True  # ইউজার ব্লক করেছে
-                except Exception:
-                    pass
-            if not sent:
-                try:
-                    payload = {"chat_id": uid, "text": fb_text, "parse_mode": "HTML",
-                               "disable_web_page_preview": True, "reply_markup": kb}
-                    r = post("sendMessage", dict(payload, message_effect_id=effect)) if effect_ok else {"ok": False}
-                    if not r.get("ok"):
-                        if effect_ok and "effect" in str(r.get("description", "")).lower():
-                            effect_ok = False
-                        post("sendMessage", payload)
-                except Exception:
-                    pass
+            for _try in range(3):
+                res = attempt(uid)
+                if res in ("ok", "user"):
+                    st["streak"] = 0
+                    break
+                st["streak"] += 1
+                if st["mode"] < 2 and st["streak"] >= 2:
+                    st["mode"] += 1          # এই ধাপ চলছে না, নিচের ধাপে নামি
+                    st["streak"] = 0
+                elif st["mode"] == 2:
+                    break
             time.sleep(0.035)
 
     threading.Thread(target=run, daemon=True).start()
