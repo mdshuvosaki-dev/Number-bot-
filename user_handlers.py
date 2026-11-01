@@ -69,7 +69,7 @@ def handle_user_message(msg):
         return
 
     # অ্যাডমিন: /emojiid এবং /seticons (স্টক কার্ডের প্রিমিয়াম আইকন)
-    if (text.startswith("/seticons") or text.startswith("/emojiid")) and is_admin(chat_id):
+    if (text.startswith("/seticons") or text.startswith("/emojiid") or text.startswith("/animemojis")) and is_admin(chat_id):
         from msg_format import handle_emoji_cmd
         handle_emoji_cmd(chat_id, msg)
         return
