@@ -42,8 +42,7 @@ bot_settings = {
     },
     "custom_messages": DEFAULT_CUSTOM_MESSAGES.copy(),
     "stock_icons": [],
-    "stock_gif": "",
-    "checker_accounts": {}
+    "stock_gif": ""
 }
 
 FS_KEYS = [
@@ -53,7 +52,8 @@ FS_KEYS = [
     "stex_keys", "voltx_keys", "search_countries", "stex_services", "voltx_services",
     "fj_on", "fj_channels", "voltx_auto", "stex_auto", "zenex_auto", "mint_auto",
     "zenex_keys", "zenex_services", "zenex_search_countries",
-    "mint_keys", "mint_services", "mint_search_countries", "stock_icons", "stock_gif", "checker_accounts"
+    "mint_keys", "mint_services", "mint_search_countries", "stock_icons", "stock_gif",
+    "premium_flags", "premium_apps"
 ]
 
 # ==========================================
